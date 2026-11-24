@@ -36,7 +36,7 @@ const PANEL_OPTIONS = [
     description: TYPES[k].description,
   })),
   { value: 'bearbeiten', label: 'Eintrag bearbeiten / löschen', emoji: '📝', description: 'Vorhandenen Eintrag über seine Nummer ändern' },
-  ...['merkmal', 'problem', 'dienst', 'ausbildung'].map((k) => ({
+  ...['merkmal', 'dienst', 'ausbildung'].map((k) => ({
     value: `eintrag:${k}`,
     label: TYPES[k].label,
     emoji: TYPES[k].emoji,
@@ -55,9 +55,9 @@ function panelMessage() {
         'Wähle unten im Menü aus, was du tun möchtest.',
         '',
         '👮 **Personalakte** – eigene Akte für jeden Beamten',
-        '⚠️ **Warn** · 🔨 **Bann** · 📢 **Meldung**',
+        '⚠️ **Warn** · 🔨 **Bann** · 📢 **Meldung / Info**',
         '✅ **Positive** und ❌ **Negative Einträge**',
-        '🔍 **Wichtige Merkmale** · 🚨 **Probleme**',
+        '🔍 **Wichtige Merkmale**',
         '🕒 **Dienstverhalten** · 🎓 **Ausbildungen**',
         '📝 **Bearbeitung** – Einträge jederzeit aktualisieren',
       ].join('\n'),
@@ -239,12 +239,6 @@ function akteMessage(akte, entries) {
     {
       name: '🔍 Wichtige Merkmale',
       value: listField(by('merkmal').map((e) => `• **${e.daten.art}:** ${cut(e.daten.merkmal, 70)} (#${e.id})`)),
-    },
-    {
-      name: '🚨 Probleme',
-      value: listField(
-        by('problem').map((e) => `• ${cut(e.daten.problem, 60)} – *${e.daten.status}* (#${e.id})`),
-      ),
     },
     {
       name: '📜 Letzte Einträge',

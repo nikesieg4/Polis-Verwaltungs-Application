@@ -35,11 +35,12 @@ const TYPES = {
     ],
   },
   meldung: {
-    label: 'Meldung',
+    label: 'Meldung / Info',
     emoji: '📢',
     color: 0x3b82f6,
-    description: 'Beschwerde oder Vorfall eintragen',
+    description: 'Beschwerden, Vorfälle und Infos eintragen',
     fields: [
+      { id: 'art', name: 'Art', label: 'Art', type: 'select', required: true, options: ['Meldung', 'Info'] },
       { id: 'betreff', name: 'Betreff', label: 'Betreff', type: 'short', required: true, max: 200 },
       { id: 'beschreibung', name: 'Beschreibung', label: 'Beschreibung', type: 'paragraph', required: true, max: 1500 },
       { id: 'melder', name: 'Gemeldet von / Beteiligte', label: 'Gemeldet von / Beteiligte', type: 'short', max: 200 },
@@ -81,25 +82,6 @@ const TYPES = {
         options: ['Fähigkeit', 'Stärke', 'Auffälligkeit', 'Sonstiges'],
       },
       { id: 'beschreibung', name: 'Beschreibung', label: 'Beschreibung', type: 'paragraph', max: 1500 },
-    ],
-  },
-  problem: {
-    label: 'Problem',
-    emoji: '🚨',
-    color: 0xea580c,
-    description: 'Konflikte und wiederkehrende Probleme',
-    fields: [
-      { id: 'problem', name: 'Problem', label: 'Problem', type: 'short', required: true, max: 200 },
-      { id: 'beschreibung', name: 'Beschreibung', label: 'Beschreibung', type: 'paragraph', required: true, max: 1500 },
-      { id: 'beteiligte', name: 'Beteiligte', label: 'Beteiligte', type: 'short', max: 200 },
-      {
-        id: 'status',
-        name: 'Status',
-        label: 'Status',
-        type: 'select',
-        required: true,
-        options: ['Offen', 'In Klärung', 'Gelöst', 'Wiederkehrend'],
-      },
     ],
   },
   dienst: {
@@ -180,7 +162,7 @@ function summary(entry) {
   const d = entry.daten;
   if (entry.typ === 'dienst') return `A ${d.aktivitaet}/10 · Z ${d.zuverlaessigkeit}/10 · V ${d.verhalten}/10`;
   if (entry.typ === 'ausbildung') return `${d.ausbildung} – ${d.ergebnis}`;
-  if (entry.typ === 'problem') return `${d.problem} (${d.status})`;
+  if (entry.typ === 'meldung') return `${d.art ? `[${d.art}] ` : ''}${d.betreff}`;
   if (entry.typ === 'bann') return `${d.grund} (${d.dauer})`;
   const first = t.fields[0];
   return d[first.id] || '—';

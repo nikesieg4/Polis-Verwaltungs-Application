@@ -34,12 +34,11 @@ https://discord.com/oauth2/authorize?client_id=1574700107566284830&scope=bot%20a
 | 👮 | Personalakte anlegen | Beamter (Dropdown mit Server-Mitgliedern), Abteilung, Rang, Ingame-Name, Beschreibung |
 | ⚠️ | Warn | Grund, Details, Dauer |
 | 🔨 | Bann | Grund, Dauer, Details |
-| 📢 | Meldung | Betreff, Beschreibung, Melder/Beteiligte |
+| 📢 | Meldung / Info | Art (Meldung oder Info), Betreff, Beschreibung, Melder/Beteiligte |
 | ✅ | Positiver Eintrag | Titel, Beschreibung |
 | ❌ | Negativer Eintrag | Titel, Beschreibung |
 | 📝 | Bearbeitung | Jeden Eintrag über seine Nummer bearbeiten oder löschen |
 | 🔍 | Wichtige Merkmale | Fähigkeit / Stärke / Auffälligkeit |
-| 🚨 | Probleme | Konflikte, Beteiligte, Status (offen, gelöst …) |
 | 🕒 | Dienstverhalten | Aktivität, Zuverlässigkeit, Verhalten (1–10), Bemerkung |
 | 🎓 | Ausbildungen | Schulung/Prüfung, Ergebnis, Prüfer |
 | 🗂️ | Stammdaten bearbeiten | Abteilung, Rang, Beschreibung usw. ändern |
@@ -50,7 +49,7 @@ Der Forum-Beitrag heißt wie der **Discord-Name** des Beamten auf dem Server.
 Ändert jemand seinen Namen, passt der Bot den Titel beim nächsten Eintrag automatisch an.
 Bei Warn, Bann usw. stehen im Dropdown **nur Beamte mit Personalakte** (bei mehr als 25 Akten: Mitgliedersuche, Leute ohne Akte werden abgelehnt).
 
-Jeder Beamte hat **einen** Forum-Post mit seiner **Übersicht**: Stammdaten, Zähler aller Einträge, letztes Dienstverhalten, Ausbildungen, Merkmale, Probleme und die letzten Einträge.
+Jeder Beamte hat **einen** Forum-Post mit seiner **Übersicht**: Stammdaten, Zähler aller Einträge, letztes Dienstverhalten, Ausbildungen, Merkmale und die letzten Einträge.
 Sie aktualisiert sich automatisch.
 
 Über den Button **📋 Einträge anzeigen** in der Akte öffnet sich eine Liste, die nur du siehst. Die Einträge stehen also nicht unter der Akte.

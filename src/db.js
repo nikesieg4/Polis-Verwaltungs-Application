@@ -108,7 +108,27 @@ async function init() {
       if (!/duplicate column/i.test(err.message)) throw err;
     }
   }
+  await convertProblemsToMeldung();
   return getBackend().name;
+}
+
+/** Einmalig: Eintragsart „Problem“ wurde entfernt → bestehende Einträge werden zu „Meldung / Info“ */
+async function convertProblemsToMeldung() {
+  const KEY = 'problem_to_meldung_v1';
+  if (await getMeta(KEY)) return;
+  const rows = await all(`SELECT id, daten FROM eintraege WHERE typ = 'problem'`);
+  for (const row of rows) {
+    const d = JSON.parse(row.daten || '{}');
+    const daten = {
+      art: 'Meldung',
+      betreff: d.problem || 'Problem',
+      beschreibung: [d.beschreibung, d.status ? `Status: ${d.status}` : ''].filter(Boolean).join('\n\n'),
+      melder: d.beteiligte || '',
+    };
+    await run(`UPDATE eintraege SET typ = 'meldung', daten = ? WHERE id = ?`, [JSON.stringify(daten), row.id]);
+  }
+  await setMeta(KEY, String(now()));
+  if (rows.length) console.log(`✅ ${rows.length} Problem-Einträge in „Meldung / Info“ umgewandelt`);
 }
 
 /* ------------------------------------------------------------------ */

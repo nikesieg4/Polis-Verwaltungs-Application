@@ -184,6 +184,10 @@ async function panelSelect(interaction) {
       break;
     case 'eintrag': {
       const t = TYPES[typ];
+      if (!t) {
+        reset(); // veraltetes Panel → neue Auswahl anzeigen
+        throw new UserError('Diese Option gibt es nicht mehr. Das Panel wurde aktualisiert, bitte erneut auswählen.');
+      }
       const { mode, field } = await beamterField(interaction.guildId);
       await interaction.showModal(buildModal(`entry:new:${typ}:${mode}`, `${t.emoji} ${t.label}`, [field, ...t.fields]));
       break;
@@ -496,7 +500,7 @@ async function migrateEntriesToView(client) {
 }
 
 /** Einmalig alle Akten neu aufbauen (z. B. nach Änderung des Titel-Formats). key bei jeder Änderung erhöhen. */
-async function refreshAllOnce(client, key = 'refresh_titles_v2') {
+async function refreshAllOnce(client, key = 'refresh_overview_v3') {
   if (await db.getMeta(key)) return;
   const akten = await db.allAkten();
   let done = 0;
