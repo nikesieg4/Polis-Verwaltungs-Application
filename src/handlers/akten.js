@@ -23,23 +23,17 @@ const EPH = { flags: MessageFlags.Ephemeral };
 /* Hilfsfunktionen                                                     */
 /* ------------------------------------------------------------------ */
 
-async function resolveAkte(guildId, query) {
-  const q = query.trim();
-  const threadId = q.match(/^<#(\d{17,20})>$/)?.[1] ?? (/^\d{17,20}$/.test(q) ? q : null);
-  if (threadId) {
-    const byThread = await db.getAkteByThread(threadId);
-    if (byThread && byThread.guild_id === guildId) return byThread;
+/** Akte des im Dropdown gewählten Discord-Mitglieds */
+async function akteForMember(guildId, userId) {
+  if (!userId) throw new UserError('Bitte einen Beamten auswählen.');
+  const akte = await db.findAkteByDiscord(guildId, userId);
+  if (!akte) {
+    throw new UserError(
+      `Für <@${userId}> gibt es noch keine Personalakte. Lege sie zuerst über **👮 Personalakte anlegen** an ` +
+        '(bei älteren Akten: Discord-Mitglied über **Stammdaten bearbeiten** in der Akte zuordnen).',
+    );
   }
-
-  const exact = await db.exactAkten(guildId, q);
-  if (exact.length === 1) return exact[0];
-  const rows = exact.length ? exact : await db.searchAkten(guildId, q, 10);
-  if (rows.length === 1) return rows[0];
-  if (!rows.length) throw new UserError(`Keine Personalakte für „${cut(q, 50)}“ gefunden.`);
-  throw new UserError(
-    `Mehrere Akten passen zu „${cut(q, 50)}“. Bitte genauer angeben (am besten die Dienstnummer):\n` +
-      rows.map((a) => `• **${a.name}** – ${a.dienstnummer || 'ohne DN'}`).join('\n'),
-  );
+  return akte;
 }
 
 async function loadAkte(guildId, id) {
@@ -70,6 +64,14 @@ async function refreshAkte(client, akteId) {
   const akte = await db.getAkte(akteId);
   if (!akte) return;
   const thread = await getThread(client, akte);
+  // Discord-Namen aktuell halten (Name des Forum-Beitrags)
+  if (akte.discord_id) {
+    const member = await thread.guild.members.fetch(akte.discord_id).catch(() => null);
+    if (member && member.displayName !== akte.discord_name) {
+      akte.discord_name = member.displayName;
+      await db.setDiscordName(akte.id, member.displayName);
+    }
+  }
   const entries = await db.listEntries(akte.id);
   const starter = await thread.fetchStarterMessage().catch(() => null);
   if (starter) await starter.edit(akteMessage(akte, entries));
@@ -77,16 +79,27 @@ async function refreshAkte(client, akteId) {
   if (thread.name !== name) await thread.setName(name).catch(() => {});
 }
 
-function parseAkteInput(values) {
+/** Formularwerte der Stammdaten prüfen + aktuellen Discord-Namen des Beamten ermitteln */
+async function parseAkteInput(interaction, values, currentId = null) {
   const data = { ...values };
-  if (data.discord_id) {
-    const id = data.discord_id.match(/(\d{17,20})/)?.[1];
-    if (!id) throw new UserError('Die Discord-ID ist ungültig (nur Zahlen, z. B. `123456789012345678`).');
-    data.discord_id = id;
-  } else {
-    data.discord_id = null;
+  if (!data.discord_id) throw new UserError('Bitte den Beamten (Discord) auswählen.');
+  if (!data.abteilung) throw new UserError('Bitte eine Abteilung auswählen.');
+
+  const member = await interaction.guild.members.fetch(data.discord_id).catch(() => null);
+  if (!member) throw new UserError('Dieses Mitglied ist nicht (mehr) auf dem Server.');
+  if (member.user.bot) throw new UserError('Für Bots kann keine Personalakte angelegt werden.');
+  data.discord_name = member.displayName;
+
+  const sameUser = await db.findAkteByDiscord(interaction.guildId, data.discord_id);
+  if (sameUser && sameUser.id !== currentId) {
+    throw new UserError(`<@${data.discord_id}> hat bereits eine Personalakte: <#${sameUser.thread_id}>`);
   }
-  data.notiz = data.notiz || null;
+  const sameDn = await db.findAkteByDienstnummer(interaction.guildId, data.abteilung, data.dienstnummer);
+  if (sameDn && sameDn.id !== currentId) {
+    throw new UserError(
+      `Die Dienstnummer **[${data.abteilung}|${data.dienstnummer}]** gehört bereits zur Akte von **${sameDn.name}**.`,
+    );
+  }
   return data;
 }
 
@@ -149,7 +162,14 @@ async function panelSelect(interaction) {
     case 'suchen':
       await interaction.showModal(
         buildModal('find:search', '🔎 Akte suchen', [
-          { id: 'suche', label: 'Name oder Dienstnummer', type: 'short', required: true, max: 80 },
+          {
+            id: 'suche',
+            label: 'Suche',
+            description: 'Ingame-Name, Discord-Name, Dienstnummer oder z. B. 15|04',
+            type: 'short',
+            required: true,
+            max: 80,
+          },
         ]),
       );
       break;
@@ -166,11 +186,7 @@ async function panelSelect(interaction) {
 async function akteNew(interaction) {
   const cfg = await requireAccess(interaction);
   await interaction.deferReply(EPH);
-  const data = parseAkteInput(readModal(interaction, AKTE_FIELDS));
-
-  if (await db.findAkteByDienstnummer(interaction.guildId, data.dienstnummer)) {
-    throw new UserError(`Es gibt bereits eine Personalakte mit der Dienstnummer **${data.dienstnummer}**.`);
-  }
+  const data = await parseAkteInput(interaction, readModal(interaction, AKTE_FIELDS));
 
   const forum = await interaction.guild.channels.fetch(cfg.forum_channel_id).catch(() => null);
   if (!forum || forum.type !== ChannelType.GuildForum) {
@@ -188,7 +204,7 @@ async function akteNew(interaction) {
       reason: `Personalakte angelegt von ${interaction.user.tag}`,
     });
     await db.setAkteThread(id, thread.id);
-    await interaction.editReply(`✅ Personalakte für **${akte.name}** angelegt: <#${thread.id}>`);
+    await interaction.editReply(`✅ Personalakte für <@${akte.discord_id}> angelegt: <#${thread.id}>`);
   } catch (err) {
     await db.deleteAkte(id);
     if (err.code === 50013 || err.code === 50001) {
@@ -204,7 +220,7 @@ async function entryNew(interaction, typ) {
   await interaction.deferReply(EPH);
 
   const values = readModal(interaction, [BEAMTER_FIELD, ...TYPES[typ].fields]);
-  const akte = await resolveAkte(interaction.guildId, values.beamter);
+  const akte = await akteForMember(interaction.guildId, values.beamter);
   delete values.beamter;
   validateEntry(typ, values);
 
@@ -249,11 +265,7 @@ async function akteSave(interaction, id) {
   await requireAccess(interaction);
   await interaction.deferReply(EPH);
   const akte = await loadAkte(interaction.guildId, id);
-  const data = parseAkteInput(readModal(interaction, AKTE_FIELDS));
-  const dupe = await db.findAkteByDienstnummer(interaction.guildId, data.dienstnummer);
-  if (dupe && dupe.id !== akte.id) {
-    throw new UserError(`Die Dienstnummer **${data.dienstnummer}** gehört bereits zur Akte von **${dupe.name}**.`);
-  }
+  const data = await parseAkteInput(interaction, readModal(interaction, AKTE_FIELDS), akte.id);
   await db.updateAkte(akte.id, data, interaction.user.id);
 
   // Kopfzeile aller Einträge enthält Name + DN → mit aktualisieren
@@ -281,10 +293,10 @@ async function findEntry(interaction) {
 
 async function findAkte(interaction) {
   await requireAccess(interaction);
-  const akte = await resolveAkte(interaction.guildId, interaction.fields.getTextInputValue('beamter'));
+  const akte = await akteForMember(interaction.guildId, readModal(interaction, [BEAMTER_FIELD]).beamter);
   await interaction.reply({
     ...EPH,
-    content: `🗂️ Personalakte von **${akte.name}** (${akte.dienstnummer || 'ohne DN'}) – ${akte.thread_id ? `<#${akte.thread_id}>` : ''}`,
+    content: `🗂️ Personalakte von **${akte.name}** – ${akte.thread_id ? `<#${akte.thread_id}>` : ''}`,
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -307,7 +319,10 @@ async function search(interaction) {
     .setTitle(`🔎 Suchergebnisse für „${cut(q, 50)}“`)
     .setDescription(
       rows
-        .map((a) => `• **${a.name}** – ${a.dienstnummer || 'ohne DN'} · ${a.rang || '—'} · ${a.thread_id ? `<#${a.thread_id}>` : ''}`)
+        .map(
+          (a) =>
+            `• ${a.thread_id ? `<#${a.thread_id}>` : `**${a.name}**`} · ${a.discord_id ? `<@${a.discord_id}>` : ''} · ${a.rang || '—'}`,
+        )
         .join('\n'),
     );
   await interaction.reply({ ...EPH, embeds: [embed] });

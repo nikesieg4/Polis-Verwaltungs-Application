@@ -135,20 +135,35 @@ const TYPES = {
   },
 };
 
-// Stammdaten der Personalakte
+// Abteilungen (Nummer erscheint im Namen des Forum-Beitrags: LPB [15|DN] Name)
+const ABTEILUNGEN = [
+  { id: '15', name: 'Polizei' },
+  { id: '20', name: 'Kripo' },
+  { id: '25', name: 'SEK' },
+];
+const abteilungName = (id) => ABTEILUNGEN.find((a) => a.id === String(id))?.name ?? '';
+
+// Stammdaten der Personalakte (max. 5 Felder pro Formular, Reihenfolge = Reihenfolge im Formular)
 const AKTE_FIELDS = [
-  { id: 'name', name: 'Ingame-Name', label: 'Ingame-Name', type: 'short', required: true, max: 80 },
-  { id: 'dienstnummer', name: 'Dienstnummer', label: 'Dienstnummer', type: 'short', required: true, max: 30 },
-  { id: 'rang', name: 'Rang', label: 'Rang', type: 'short', required: true, max: 60 },
   {
     id: 'discord_id',
     name: 'Discord',
-    label: 'Discord-ID des Beamten (optional)',
-    type: 'short',
-    max: 25,
-    placeholder: 'z. B. 123456789012345678',
+    label: 'Beamter (Discord)',
+    description: 'Person auf dem Server auswählen',
+    type: 'user',
+    required: true,
   },
-  { id: 'notiz', name: 'Notiz', label: 'Allgemeine Notiz (optional)', type: 'paragraph', max: 1000 },
+  {
+    id: 'abteilung',
+    name: 'Abteilung',
+    label: 'Abteilung',
+    type: 'select',
+    required: true,
+    options: ABTEILUNGEN.map((a) => ({ value: a.id, label: `${a.id} – ${a.name}` })),
+  },
+  { id: 'dienstnummer', name: 'Dienstnummer', label: 'Dienstnummer', type: 'short', required: true, max: 30 },
+  { id: 'rang', name: 'Rang', label: 'Rang', type: 'short', required: true, max: 60 },
+  { id: 'name', name: 'Ingame-Name', label: 'Ingame-Name', type: 'short', required: true, max: 80 },
 ];
 
 /** Kurztext eines Eintrags (für Listen) */
@@ -164,4 +179,4 @@ function summary(entry) {
   return d[first.id] || '—';
 }
 
-module.exports = { TYPES, AKTE_FIELDS, summary };
+module.exports = { TYPES, AKTE_FIELDS, ABTEILUNGEN, abteilungName, summary };

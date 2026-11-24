@@ -1,6 +1,6 @@
 'use strict';
 // Wird beim Start automatisch ausgeführt (lokal SQLite und Cloudflare D1).
-module.exports = [
+const tables = [
   `CREATE TABLE IF NOT EXISTS guild_config (
     guild_id TEXT PRIMARY KEY,
     forum_channel_id TEXT,
@@ -42,3 +42,11 @@ module.exports = [
     value TEXT
   )`,
 ];
+
+// Nachträglich hinzugefügte Spalten (Fehler "duplicate column" wird ignoriert)
+const columns = [
+  `ALTER TABLE akten ADD COLUMN abteilung TEXT`,
+  `ALTER TABLE akten ADD COLUMN discord_name TEXT`,
+];
+
+module.exports = { tables, columns };

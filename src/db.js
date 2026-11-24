@@ -100,7 +100,14 @@ const get = async (sql, params) => (await getBackend().all(sql, params))[0] ?? n
 const run = (sql, params) => getBackend().run(sql, params);
 
 async function init() {
-  for (const stmt of schema) await run(stmt);
+  for (const stmt of schema.tables) await run(stmt);
+  for (const stmt of schema.columns) {
+    try {
+      await run(stmt);
+    } catch (err) {
+      if (!/duplicate column/i.test(err.message)) throw err;
+    }
+  }
   return getBackend().name;
 }
 
@@ -141,9 +148,20 @@ async function setPanel(guildId, channelId, messageId) {
 
 async function createAkte(guildId, data, userId) {
   const r = await run(
-    `INSERT INTO akten (guild_id, name, dienstnummer, rang, discord_id, notiz, created_by, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [guildId, data.name, data.dienstnummer, data.rang, data.discord_id, data.notiz, userId, now()],
+    `INSERT INTO akten (guild_id, name, dienstnummer, rang, discord_id, discord_name, abteilung, notiz, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      guildId,
+      data.name,
+      data.dienstnummer,
+      data.rang,
+      data.discord_id,
+      data.discord_name,
+      data.abteilung,
+      data.notiz,
+      userId,
+      now(),
+    ],
   );
   return r.lastId;
 }
@@ -157,9 +175,10 @@ async function setAkteThread(id, threadId) {
 
 async function updateAkte(id, data, userId) {
   await run(
-    `UPDATE akten SET name = ?, dienstnummer = ?, rang = ?, discord_id = ?, notiz = ?, updated_by = ?, updated_at = ?
+    `UPDATE akten SET name = ?, dienstnummer = ?, rang = ?, discord_id = ?, discord_name = ?, abteilung = ?,
+       updated_by = ?, updated_at = ?
      WHERE id = ?`,
-    [data.name, data.dienstnummer, data.rang, data.discord_id, data.notiz, userId, now(), id],
+    [data.name, data.dienstnummer, data.rang, data.discord_id, data.discord_name, data.abteilung, userId, now(), id],
   );
 }
 
@@ -168,24 +187,38 @@ async function deleteAkte(id) {
   await run('DELETE FROM akten WHERE id = ?', [id]);
 }
 
-async function findAkteByDienstnummer(guildId, dn) {
-  return get('SELECT * FROM akten WHERE guild_id = ? AND lower(dienstnummer) = lower(?)', [guildId, dn]);
+async function findAkteByDienstnummer(guildId, abteilung, dn) {
+  return get(
+    `SELECT * FROM akten WHERE guild_id = ? AND coalesce(abteilung, '') = ? AND lower(dienstnummer) = lower(?)`,
+    [guildId, abteilung ?? '', dn],
+  );
+}
+
+async function findAkteByDiscord(guildId, discordId) {
+  return get('SELECT * FROM akten WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
 }
 
 async function searchAkten(guildId, query, limit = 10) {
-  const like = `%${query.toLowerCase().replace(/[%_]/g, '')}%`;
+  const q = query.trim().replace(/^\[|\]$/g, '');
+  // Format "15|04" → Abteilung + Dienstnummer
+  const abtDn = q.match(/^(\d+)\s*[|/]\s*(.+)$/);
+  if (abtDn) {
+    return all(
+      `SELECT * FROM akten WHERE guild_id = ? AND abteilung = ? AND lower(dienstnummer) LIKE ? ORDER BY dienstnummer LIMIT ?`,
+      [guildId, abtDn[1], `%${abtDn[2].toLowerCase().replace(/[%_]/g, '')}%`, limit],
+    );
+  }
+  const like = `%${q.toLowerCase().replace(/[%_]/g, '')}%`;
   return all(
-    `SELECT * FROM akten WHERE guild_id = ? AND (lower(name) LIKE ? OR lower(coalesce(dienstnummer, '')) LIKE ?)
-     ORDER BY name LIMIT ?`,
-    [guildId, like, like, limit],
+    `SELECT * FROM akten WHERE guild_id = ? AND (lower(name) LIKE ? OR lower(coalesce(dienstnummer, '')) LIKE ?
+       OR lower(coalesce(discord_name, '')) LIKE ?)
+     ORDER BY abteilung, dienstnummer, name LIMIT ?`,
+    [guildId, like, like, like, limit],
   );
 }
 
-async function exactAkten(guildId, query) {
-  return all(
-    `SELECT * FROM akten WHERE guild_id = ? AND (lower(coalesce(dienstnummer, '')) = lower(?) OR lower(name) = lower(?))`,
-    [guildId, query, query],
-  );
+async function setDiscordName(id, name) {
+  await run('UPDATE akten SET discord_name = ? WHERE id = ?', [name, id]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -259,8 +292,9 @@ module.exports = {
   updateAkte,
   deleteAkte,
   findAkteByDienstnummer,
+  findAkteByDiscord,
   searchAkten,
-  exactAkten,
+  setDiscordName,
   createEntry,
   getEntry,
   setEntryMessage,

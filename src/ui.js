@@ -10,9 +10,10 @@ const {
   TextInputBuilder,
   TextInputStyle,
   LabelBuilder,
+  UserSelectMenuBuilder,
 } = require('discord.js');
 const config = require('./config');
-const { TYPES, summary } = require('./categories');
+const { TYPES, summary, abteilungName } = require('./categories');
 
 const cut = (s, n) => {
   s = String(s ?? '');
@@ -100,14 +101,25 @@ function buildModal(customId, title, fields, values = {}) {
         .setMaxValues(1)
         .setPlaceholder('Auswählen …')
         .addOptions(
-          f.options.map((o) =>
-            new StringSelectMenuOptionBuilder()
-              .setLabel(o)
-              .setValue(o)
-              .setDefault(value !== undefined && String(value) === o),
-          ),
+          f.options.map((o) => {
+            const opt = typeof o === 'string' ? { value: o, label: o } : o;
+            return new StringSelectMenuOptionBuilder()
+              .setLabel(opt.label)
+              .setValue(opt.value)
+              .setDefault(value !== undefined && value !== null && String(value) === opt.value);
+          }),
         );
       label.setStringSelectMenuComponent(select);
+    } else if (f.type === 'user') {
+      // Dropdown mit den Mitgliedern des Servers (Discord-eigene Suche)
+      const select = new UserSelectMenuBuilder()
+        .setCustomId(f.id)
+        .setRequired(Boolean(f.required))
+        .setMinValues(f.required ? 1 : 0)
+        .setMaxValues(1)
+        .setPlaceholder('Mitglied auswählen …');
+      if (value) select.setDefaultUsers(String(value));
+      label.setUserSelectMenuComponent(select);
     } else {
       const input = new TextInputBuilder()
         .setCustomId(f.id)
@@ -129,6 +141,8 @@ function readModal(interaction, fields) {
   for (const f of fields) {
     if (f.type === 'select') {
       out[f.id] = interaction.fields.getStringSelectValues(f.id)?.[0] ?? '';
+    } else if (f.type === 'user') {
+      out[f.id] = interaction.fields.getSelectedUsers(f.id)?.first()?.id ?? '';
     } else {
       out[f.id] = interaction.fields.getTextInputValue(f.id).trim();
     }
@@ -139,17 +153,21 @@ function readModal(interaction, fields) {
 const BEAMTER_FIELD = {
   id: 'beamter',
   label: 'Beamter',
-  description: 'Dienstnummer oder Ingame-Name des Beamten',
-  type: 'short',
+  description: 'Beamten auf dem Server auswählen',
+  type: 'user',
   required: true,
-  max: 80,
 };
 
 /* ------------------------------------------------------------------ */
 /* Personalakte (Übersicht = erste Nachricht im Forum-Post)            */
 /* ------------------------------------------------------------------ */
 
+/** Name des Forum-Beitrags: LPB [Abteilung|Dienstnummer] Discord-Name */
 function threadName(akte) {
+  if (akte.abteilung) {
+    return cut(`LPB [${akte.abteilung}|${akte.dienstnummer || '—'}] ${akte.discord_name || akte.name}`, 100);
+  }
+  // ältere Akten ohne Abteilung
   return cut(`${akte.dienstnummer ? `[${akte.dienstnummer}] ` : ''}${akte.name}`, 100);
 }
 
@@ -183,9 +201,11 @@ function akteMessage(akte, entries) {
     .setDescription(
       cut(
         [
+          `**Discord:** ${akte.discord_id ? `<@${akte.discord_id}>` : '—'}`,
+          `**Abteilung:** ${akte.abteilung ? `${akte.abteilung} – ${abteilungName(akte.abteilung)}` : '—'}`,
           `**Dienstnummer:** ${akte.dienstnummer || '—'}`,
           `**Rang:** ${akte.rang || '—'}`,
-          `**Discord:** ${akte.discord_id ? `<@${akte.discord_id}>` : '—'}`,
+          `**Ingame-Name:** ${akte.name}`,
           `**Angelegt:** ${ts(akte.created_at, 'D')}${akte.created_by ? ` von <@${akte.created_by}>` : ''}`,
           akte.notiz ? `\n📌 **Notiz:**\n${akte.notiz}` : '',
         ]
