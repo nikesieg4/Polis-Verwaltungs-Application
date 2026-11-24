@@ -29,9 +29,10 @@ warn() { echo -e "${c_yellow}!${c_off} $*"; }
 die()  { echo -e "${c_red}✘ $*${c_off}" >&2; exit 1; }
 
 # Eingaben auch bei "curl ... | bash" von der Tastatur lesen
+has_tty() { { : </dev/tty; } 2>/dev/null; }
 ask() {        # ask VAR "Frage" [geheim]
   local __var=$1 __prompt=$2 __secret=${3:-} __val=""
-  if [[ -r /dev/tty ]]; then
+  if has_tty; then
     if [[ -n $__secret ]]; then read -rsp "$__prompt" __val </dev/tty; echo; else read -rp "$__prompt" __val </dev/tty; fi
   fi
   printf -v "$__var" '%s' "$__val"
@@ -166,7 +167,7 @@ if [[ ! -f $ENV_FILE || ${1:-} == "--reconfigure" ]]; then
   while [[ -z $TOKEN ]]; do
     echo "Bot-Token findest du im Discord Developer Portal → deine Anwendung → Bot → Reset Token."
     ask TOKEN "Bot-Token (Eingabe unsichtbar): " secret
-    [[ -n $TOKEN ]] || { [[ -r /dev/tty ]] || die "Kein Terminal – DISCORD_TOKEN=... vor den Befehl schreiben."; continue; }
+    [[ -n $TOKEN ]] || { has_tty || die "Kein Terminal – DISCORD_TOKEN=... vor den Befehl schreiben."; continue; }
     BOT_NAME=$(curl -fsS -H "Authorization: Bot ${TOKEN}" https://discord.com/api/v10/users/@me 2>/dev/null \
       | sed -nE 's/.*"username": ?"([^"]+)".*/\1/p' || true)
     if [[ -z ${BOT_NAME} ]]; then warn "Token ungültig – bitte erneut eingeben."; TOKEN=""; else ok "Token gültig – Bot: ${BOT_NAME}"; fi
