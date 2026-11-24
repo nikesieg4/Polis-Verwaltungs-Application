@@ -10,7 +10,8 @@ try {
   /* keine .env vorhanden – Variablen kommen evtl. aus der Umgebung (systemd, GitHub Actions) */
 }
 
-const env = (k, d = '') => (process.env[k] ?? d).trim();
+// Leerzeichen und versehentlich mitkopierte Anführungszeichen entfernen
+const env = (k, d = '') => (process.env[k] ?? d).trim().replace(/^["']|["']$/g, '').trim();
 
 const cf = {
   accountId: env('CF_ACCOUNT_ID'),

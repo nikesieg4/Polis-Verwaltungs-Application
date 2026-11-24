@@ -75,6 +75,19 @@ function getBackend() {
     if (!config.db.d1Configured) {
       throw new Error('DB_DRIVER=d1, aber CF_ACCOUNT_ID / CF_D1_DATABASE_ID / CF_API_TOKEN fehlen in der .env');
     }
+    const { accountId, databaseId } = config.db.cf;
+    if (!/^[0-9a-f]{32}$/i.test(accountId)) {
+      throw new Error(
+        `CF_ACCOUNT_ID ist ungültig ("${accountId}"). Erwartet: 32 Zeichen, z. B. 0123456789abcdef0123456789abcdef. ` +
+          'Korrigieren mit: bcpp-bot config',
+      );
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(databaseId)) {
+      throw new Error(
+        `CF_D1_DATABASE_ID ist ungültig ("${databaseId}"). Erwartet wird die Database ID (nicht der Name), ` +
+          'z. B. 12345678-abcd-1234-abcd-1234567890ab. Korrigieren mit: bcpp-bot config',
+      );
+    }
     backend = d1Backend(config.db.cf);
   } else {
     backend = sqliteBackend(config.db.sqlitePath);
