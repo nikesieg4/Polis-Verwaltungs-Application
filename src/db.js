@@ -229,8 +229,25 @@ async function listEntries(akteId) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Meta (z. B. einmalige Umstellungen)                                 */
+/* ------------------------------------------------------------------ */
+
+async function getMeta(key) {
+  return (await get('SELECT value FROM meta WHERE key = ?', [key]))?.value ?? null;
+}
+
+async function setMeta(key, value) {
+  await run('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, value]);
+}
+
+const allAkten = () => all('SELECT * FROM akten ORDER BY id');
+
 module.exports = {
   init,
+  getMeta,
+  setMeta,
+  allAkten,
   now,
   getConfig,
   saveConfig,

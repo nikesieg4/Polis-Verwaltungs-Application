@@ -241,6 +241,11 @@ function akteMessage(akte, entries) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
+      .setCustomId(`akte:view:${akte.id}`)
+      .setLabel(`Einträge anzeigen (${entries.length})`)
+      .setEmoji('📋')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId(`akte:edit:${akte.id}`)
       .setLabel('Stammdaten bearbeiten')
       .setEmoji('🗂️')
@@ -279,15 +284,132 @@ function entryEmbed(entry, akte) {
   return embed;
 }
 
-function entryButtons(entryId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`entry:edit:${entryId}`).setLabel('Bearbeiten').setEmoji('📝').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`entry:del:${entryId}`).setLabel('Löschen').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+/**
+ * Buttons unter einem Eintrag.
+ * back = { akteId, typ, page } → Eintrag wird in der Einträge-Ansicht angezeigt (mit „Zurück“)
+ */
+function entryButtons(entryId, back = null) {
+  const v = back ? ':v' : '';
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`entry:edit:${entryId}${v}`).setLabel('Bearbeiten').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`entry:del:${entryId}${v}`).setLabel('Löschen').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
   );
+  if (back) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`view:p:${back.akteId}:${back.typ}:${back.page}`)
+        .setLabel('Zurück zur Liste')
+        .setEmoji('◀️')
+        .setStyle(ButtonStyle.Primary),
+    );
+  }
+  return row;
 }
 
 function entryMessage(entry, akte) {
   return { embeds: [entryEmbed(entry, akte)], components: [entryButtons(entry.id)] };
+}
+
+/* ------------------------------------------------------------------ */
+/* Einträge-Ansicht (nur für den Klickenden sichtbar)                  */
+/* ------------------------------------------------------------------ */
+
+const PAGE_SIZE = 10;
+
+function entriesView(akte, entries, typ = 'alle', page = 0) {
+  if (typ !== 'alle' && !TYPES[typ]) typ = 'alle';
+  const list = (typ === 'alle' ? entries : entries.filter((e) => e.typ === typ)).slice().reverse(); // neueste zuerst
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const slice = list.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  const filterName = typ === 'alle' ? 'Alle Einträge' : `${TYPES[typ].emoji} ${TYPES[typ].label}`;
+  const embed = new EmbedBuilder()
+    .setColor(typ === 'alle' ? config.brandColor : TYPES[typ].color)
+    .setTitle(cut(`📋 ${akte.name}${akte.dienstnummer ? ` (${akte.dienstnummer})` : ''} – ${filterName}`, 256))
+    .setDescription(
+      slice.length
+        ? cut(
+            slice
+              .map(
+                (e) =>
+                  `\`#${e.id}\` ${TYPES[e.typ]?.emoji ?? ''} **${TYPES[e.typ]?.label ?? e.typ}** – ${cut(summary(e), 70)}\n` +
+                  `-# ${ts(e.created_at, 'd')} · von <@${e.created_by}>${e.updated_at ? ' · bearbeitet' : ''}`,
+              )
+              .join('\n'),
+            4096,
+          )
+        : '*Keine Einträge vorhanden.*',
+    )
+    .setFooter({ text: `Seite ${page + 1}/${pages} • ${list.length} Einträge • Eintrag unten auswählen zum Öffnen` });
+
+  const counts = Object.fromEntries(Object.keys(TYPES).map((k) => [k, entries.filter((e) => e.typ === k).length]));
+  const filter = new StringSelectMenuBuilder()
+    .setCustomId(`view:f:${akte.id}`)
+    .setPlaceholder('Kategorie filtern …')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setValue('alle')
+        .setLabel(`Alle Einträge (${entries.length})`)
+        .setEmoji('📋')
+        .setDefault(typ === 'alle'),
+      ...Object.entries(TYPES).map(([k, t]) =>
+        new StringSelectMenuOptionBuilder()
+          .setValue(k)
+          .setLabel(`${t.label} (${counts[k]})`)
+          .setEmoji(t.emoji)
+          .setDefault(typ === k),
+      ),
+    );
+
+  const components = [new ActionRowBuilder().addComponents(filter)];
+
+  if (slice.length) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`view:o:${akte.id}:${typ}:${page}`)
+          .setPlaceholder('🔍 Eintrag öffnen / bearbeiten …')
+          .addOptions(
+            slice.map((e) =>
+              new StringSelectMenuOptionBuilder()
+                .setValue(String(e.id))
+                .setLabel(cut(`#${e.id} ${TYPES[e.typ]?.label ?? e.typ}`, 100))
+                .setDescription(cut(summary(e), 100))
+                .setEmoji(TYPES[e.typ]?.emoji ?? '📄'),
+            ),
+          ),
+      ),
+    );
+  }
+
+  if (pages > 1) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`view:p:${akte.id}:${typ}:${page - 1}`)
+          .setEmoji('◀️')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page === 0),
+        new ButtonBuilder()
+          .setCustomId('view:x')
+          .setLabel(`${page + 1} / ${pages}`)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId(`view:p:${akte.id}:${typ}:${page + 1}`)
+          .setEmoji('▶️')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page >= pages - 1),
+      ),
+    );
+  }
+  return { content: '', embeds: [embed], components };
+}
+
+/** Einzelner Eintrag innerhalb der Ansicht */
+function entryDetailView(entry, akte, back) {
+  return { content: '', embeds: [entryEmbed(entry, akte)], components: [entryButtons(entry.id, back)] };
 }
 
 module.exports = {
@@ -303,4 +425,6 @@ module.exports = {
   entryEmbed,
   entryButtons,
   entryMessage,
+  entriesView,
+  entryDetailView,
 };

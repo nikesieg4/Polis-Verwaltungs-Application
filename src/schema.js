@@ -37,4 +37,8 @@ module.exports = [
     updated_at INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_eintraege_akte ON eintraege (akte_id)`,
+  `CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )`,
 ];

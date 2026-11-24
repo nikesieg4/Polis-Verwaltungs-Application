@@ -45,9 +45,11 @@ https://discord.com/oauth2/authorize?client_id=1574700107566284830&scope=bot%20a
 | 🗂️ | Stammdaten bearbeiten | Name, DN, Rang usw. ändern |
 | 🔎 | Akte suchen | Nach Name oder Dienstnummer |
 
-Jeder Eintrag erscheint **im Log-Stil** als eigene Nachricht im Forum-Post des Beamten (mit Buttons **Bearbeiten** / **Löschen**).
-Die erste Nachricht im Post ist die **Übersicht**: Stammdaten, Zähler aller Einträge, letztes Dienstverhalten, Ausbildungen, Merkmale, Probleme und die letzten Einträge.
+Jeder Beamte hat **einen** Forum-Post mit seiner **Übersicht**: Stammdaten, Zähler aller Einträge, letztes Dienstverhalten, Ausbildungen, Merkmale, Probleme und die letzten Einträge.
 Sie aktualisiert sich automatisch.
+
+Über den Button **📋 Einträge anzeigen** in der Akte öffnet sich eine Liste, die nur du siehst. Die Einträge stehen also nicht unter der Akte.
+Dort kannst du nach Kategorie filtern, blättern, einen Eintrag im Log-Stil öffnen und ihn **bearbeiten** oder **löschen**.
 
 🔒 Alle Aktionen prüfen die Highteam-Rollen aus `/aufbau` (Administratoren haben immer Zugriff).
 

@@ -12,9 +12,9 @@ const {
   BEAMTER_FIELD,
   threadName,
   akteMessage,
-  entryEmbed,
-  entryButtons,
   entryMessage,
+  entriesView,
+  entryDetailView,
 } = require('../ui');
 
 const EPH = { flags: MessageFlags.Ephemeral };
@@ -210,36 +210,39 @@ async function entryNew(interaction, typ) {
 
   const thread = await getThread(interaction.client, akte);
   const entryId = await db.createEntry(akte, typ, values, interaction.user.id);
-  const entry = await db.getEntry(entryId);
-  try {
-    const msg = await thread.send(entryMessage(entry, akte));
-    await db.setEntryMessage(entryId, msg.id);
-  } catch (err) {
-    await db.deleteEntry(entryId);
-    throw err;
-  }
   await refreshAkte(interaction.client, akte.id);
   await interaction.editReply(
-    `✅ ${TYPES[typ].emoji} **${TYPES[typ].label}** (Eintrag #${entryId}) zur Akte von **${akte.name}** hinzugefügt: <#${thread.id}>`,
+    `✅ ${TYPES[typ].emoji} **${TYPES[typ].label}** (Eintrag #${entryId}) zur Akte von **${akte.name}** hinzugefügt: <#${thread.id}>\n` +
+      '-# Ansehen über den Button „📋 Einträge anzeigen“ in der Akte.',
   );
 }
 
-async function entrySave(interaction, id) {
+async function entrySave(interaction, id, flag) {
   await requireAccess(interaction);
-  await interaction.deferReply(EPH);
+  const inView = flag === 'v' && interaction.isFromMessage();
+  if (inView) await interaction.deferUpdate();
+  else await interaction.deferReply(EPH);
+
   const entry = await loadEntry(interaction.guildId, id);
   const akte = await loadAkte(interaction.guildId, entry.akte_id);
   const values = validateEntry(entry.typ, readModal(interaction, TYPES[entry.typ].fields));
 
   await db.updateEntry(entry.id, values, interaction.user.id);
   const updated = await db.getEntry(entry.id);
+  // Alte Einträge aus früheren Versionen, die noch als Nachricht existieren, mit aktualisieren
   const thread = await getThread(interaction.client, akte);
-  const msg = updated.message_id ? await thread.messages.fetch(updated.message_id).catch(() => null) : null;
-  if (msg) await msg.edit(entryMessage(updated, akte));
-  else await db.setEntryMessage(updated.id, (await thread.send(entryMessage(updated, akte))).id);
-
+  if (updated.message_id) {
+    const msg = await thread.messages.fetch(updated.message_id).catch(() => null);
+    if (msg) await msg.edit(entryMessage(updated, akte)).catch(() => {});
+  }
   await refreshAkte(interaction.client, akte.id);
-  await interaction.editReply(`✅ Eintrag #${entry.id} wurde aktualisiert: <#${thread.id}>`);
+
+  if (inView) {
+    const view = entryDetailView(updated, akte, { akteId: akte.id, typ: 'alle', page: 0 });
+    await interaction.editReply({ ...view, content: `✅ Eintrag #${entry.id} wurde aktualisiert.` });
+  } else {
+    await interaction.editReply(`✅ Eintrag #${entry.id} wurde aktualisiert: <#${thread.id}>`);
+  }
 }
 
 async function akteSave(interaction, id) {
@@ -273,7 +276,7 @@ async function findEntry(interaction) {
   if (!nr) throw new UserError('Bitte eine Eintrags-Nummer angeben.');
   const entry = await loadEntry(interaction.guildId, nr);
   const akte = await loadAkte(interaction.guildId, entry.akte_id);
-  await interaction.reply({ ...EPH, embeds: [entryEmbed(entry, akte)], components: [entryButtons(entry.id)] });
+  await interaction.reply({ ...EPH, ...entryDetailView(entry, akte, { akteId: akte.id, typ: 'alle', page: 0 }) });
 }
 
 async function findAkte(interaction) {
@@ -314,26 +317,40 @@ async function search(interaction) {
 /* Buttons                                                             */
 /* ------------------------------------------------------------------ */
 
-async function entryEditButton(interaction, id) {
+async function entryEditButton(interaction, id, flag) {
   await requireAccess(interaction);
   const entry = await loadEntry(interaction.guildId, id);
   const t = TYPES[entry.typ];
   await interaction.showModal(
-    buildModal(`entry:save:${entry.id}`, `📝 ${t.label} #${entry.id} bearbeiten`, t.fields, entry.daten),
+    buildModal(`entry:save:${entry.id}${flag === 'v' ? ':v' : ''}`, `📝 ${t.label} #${entry.id} bearbeiten`, t.fields, entry.daten),
   );
 }
 
-async function entryDeleteButton(interaction, id) {
+async function entryDeleteButton(interaction, id, flag) {
   await requireAccess(interaction);
   const entry = await loadEntry(interaction.guildId, id);
+  const question = `Soll **${TYPES[entry.typ].emoji} ${TYPES[entry.typ].label} #${entry.id}** („${cut(summary(entry), 80)}“) wirklich gelöscht werden?`;
+  if (flag === 'v') {
+    // innerhalb der Einträge-Ansicht: dieselbe Nachricht ersetzen, „Abbrechen“ führt zurück zum Eintrag
+    await interaction.update({
+      content: question,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`entry:delok:${entry.id}:v`).setLabel('Endgültig löschen').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId(`view:o:${entry.akte_id}:alle:0:${entry.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary),
+        ),
+      ],
+    });
+    return;
+  }
   await interaction.reply({
     ...EPH,
-    content: `Soll **${TYPES[entry.typ].emoji} ${TYPES[entry.typ].label} #${entry.id}** („${cut(summary(entry), 80)}“) wirklich gelöscht werden?`,
+    content: question,
     components: [confirmRow(`entry:delok:${entry.id}`, 'Endgültig löschen')],
   });
 }
 
-async function entryDeleteConfirm(interaction, id) {
+async function entryDeleteConfirm(interaction, id, flag) {
   await requireAccess(interaction);
   await interaction.deferUpdate();
   const entry = await loadEntry(interaction.guildId, id);
@@ -345,7 +362,74 @@ async function entryDeleteConfirm(interaction, id) {
     await m?.delete().catch(() => {});
   }
   if (thread) await refreshAkte(interaction.client, akte.id);
-  await interaction.editReply({ content: `🗑️ Eintrag #${entry.id} wurde gelöscht.`, embeds: [], components: [] });
+  if (flag === 'v') {
+    const view = entriesView(akte, await db.listEntries(akte.id), 'alle', 0);
+    await interaction.editReply({ ...view, content: `🗑️ Eintrag #${entry.id} wurde gelöscht.` });
+  } else {
+    await interaction.editReply({ content: `🗑️ Eintrag #${entry.id} wurde gelöscht.`, embeds: [], components: [] });
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Einträge-Ansicht                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Button „📋 Einträge anzeigen“ in der Akte */
+async function akteViewButton(interaction, akteId) {
+  await requireAccess(interaction);
+  const akte = await loadAkte(interaction.guildId, akteId);
+  await interaction.reply({ ...EPH, ...entriesView(akte, await db.listEntries(akte.id)) });
+}
+
+/** Filter-Menü, Blättern-Buttons, Eintrag öffnen (customId: view:<f|p|o>:<akteId>:<typ>:<seite>[:<eintrag>]) */
+async function viewInteraction(interaction, parts) {
+  await requireAccess(interaction);
+  const [, action, akteId, typ = 'alle', page = '0', entryId] = parts;
+  const akte = await loadAkte(interaction.guildId, akteId);
+  const entries = await db.listEntries(akte.id);
+
+  if (action === 'f') return interaction.update(entriesView(akte, entries, interaction.values[0], 0));
+  if (action === 'p') return interaction.update(entriesView(akte, entries, typ, page));
+  if (action === 'o') {
+    const id = entryId ?? interaction.values?.[0];
+    const entry = entries.find((e) => String(e.id) === String(id));
+    if (!entry) return interaction.update({ ...entriesView(akte, entries, typ, page), content: '❌ Dieser Eintrag existiert nicht mehr.' });
+    return interaction.update(entryDetailView(entry, akte, { akteId: akte.id, typ, page }));
+  }
+}
+
+/**
+ * Einmalige Umstellung: Einträge wurden früher als Nachrichten unter die Akte gepostet.
+ * Diese Nachrichten werden entfernt (Daten bleiben in der Datenbank) und alle Übersichten bekommen den neuen Button.
+ */
+async function migrateEntriesToView(client) {
+  const KEY = 'entries_view_v1';
+  if (await db.getMeta(KEY)) return;
+  const akten = await db.allAkten();
+  let removed = 0;
+  for (const akte of akten) {
+    if (!client.guilds.cache.has(akte.guild_id)) continue;
+    try {
+      const entries = await db.listEntries(akte.id);
+      const withMsg = entries.filter((e) => e.message_id);
+      const thread = akte.thread_id ? await client.channels.fetch(akte.thread_id).catch(() => null) : null;
+      if (!thread) continue;
+      if (thread.archived) await thread.setArchived(false).catch(() => {});
+      for (const e of withMsg) {
+        const m = await thread.messages.fetch(e.message_id).catch(() => null);
+        if (m) {
+          await m.delete().catch(() => {});
+          removed++;
+        }
+        await db.setEntryMessage(e.id, null);
+      }
+      await refreshAkte(client, akte.id);
+    } catch (err) {
+      console.error(`[Umstellung] Akte #${akte.id}:`, err.message);
+    }
+  }
+  await db.setMeta(KEY, String(db.now()));
+  console.log(`✅ Umstellung: ${akten.length} Akten aktualisiert, ${removed} alte Eintrags-Nachrichten entfernt`);
 }
 
 async function akteEditButton(interaction, id) {
@@ -396,5 +480,8 @@ module.exports = {
   akteEditButton,
   akteDeleteButton,
   akteDeleteConfirm,
+  akteViewButton,
+  viewInteraction,
+  migrateEntriesToView,
   cancel,
 };

@@ -29,7 +29,10 @@ async function route(interaction) {
     return;
   }
 
-  const [scope, action, arg] = interaction.customId?.split(':') ?? [];
+  const parts = interaction.customId?.split(':') ?? [];
+  const [scope, action, arg, flag] = parts;
+
+  if (scope === 'view' && action !== 'x') return akten.viewInteraction(interaction, parts);
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'panel:select') return akten.panelSelect(interaction);
 
@@ -39,7 +42,7 @@ async function route(interaction) {
     if (scope === 'akte' && action === 'new') return akten.akteNew(interaction);
     if (scope === 'akte' && action === 'save') return akten.akteSave(interaction, arg);
     if (scope === 'entry' && action === 'new') return akten.entryNew(interaction, arg);
-    if (scope === 'entry' && action === 'save') return akten.entrySave(interaction, arg);
+    if (scope === 'entry' && action === 'save') return akten.entrySave(interaction, arg, flag);
     if (scope === 'find' && action === 'entry') return akten.findEntry(interaction);
     if (scope === 'find' && action === 'akte') return akten.findAkte(interaction);
     if (scope === 'find' && action === 'search') return akten.search(interaction);
@@ -47,9 +50,10 @@ async function route(interaction) {
 
   if (interaction.isButton()) {
     if (interaction.customId === 'cancel') return akten.cancel(interaction);
-    if (scope === 'entry' && action === 'edit') return akten.entryEditButton(interaction, arg);
-    if (scope === 'entry' && action === 'del') return akten.entryDeleteButton(interaction, arg);
-    if (scope === 'entry' && action === 'delok') return akten.entryDeleteConfirm(interaction, arg);
+    if (scope === 'entry' && action === 'edit') return akten.entryEditButton(interaction, arg, flag);
+    if (scope === 'entry' && action === 'del') return akten.entryDeleteButton(interaction, arg, flag);
+    if (scope === 'entry' && action === 'delok') return akten.entryDeleteConfirm(interaction, arg, flag);
+    if (scope === 'akte' && action === 'view') return akten.akteViewButton(interaction, arg);
     if (scope === 'akte' && action === 'edit') return akten.akteEditButton(interaction, arg);
     if (scope === 'akte' && action === 'del') return akten.akteDeleteButton(interaction, arg);
     if (scope === 'akte' && action === 'delok') return akten.akteDeleteConfirm(interaction, arg);
@@ -93,6 +97,8 @@ client.once(Events.ClientReady, async (c) => {
   } catch (err) {
     console.error('❌ Slash-Befehle konnten nicht registriert werden:', err);
   }
+
+  akten.migrateEntriesToView(c).catch((err) => console.error('[Umstellung]', err));
 
   const invite = c.generateInvite({
     scopes: [OAuth2Scopes.Bot, OAuth2Scopes.ApplicationsCommands],
