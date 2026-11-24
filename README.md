@@ -31,7 +31,7 @@ https://discord.com/oauth2/authorize?client_id=1574700107566284830&scope=bot%20a
 
 | | Funktion | Inhalt |
 |---|---|---|
-| 👮 | Personalakte anlegen | Beamter (Dropdown mit Server-Mitgliedern), Abteilung, Dienstnummer, Rang, Ingame-Name |
+| 👮 | Personalakte anlegen | Beamter (Dropdown mit Server-Mitgliedern), Abteilung, Dienstnummer (optional), Rang, Ingame-Name |
 | ⚠️ | Warn | Grund, Details, Dauer |
 | 🔨 | Bann | Grund, Dauer, Details |
 | 📢 | Meldung | Betreff, Beschreibung, Melder/Beteiligte |
@@ -46,7 +46,7 @@ https://discord.com/oauth2/authorize?client_id=1574700107566284830&scope=bot%20a
 | 🔎 | Akte suchen | Nach Ingame-/Discord-Name, Dienstnummer oder `15|04` |
 
 **Abteilungen:** 15 – Polizei · 20 – Kripo · 25 – SEK.
-Der Forum-Beitrag heißt immer **`LPB [Abteilung|Dienstnummer] Discord-Name`**, zum Beispiel `LPB [15|04] Nike`.
+Der Forum-Beitrag heißt immer **`LPB [Abteilung|Dienstnummer] Discord-Name`**, zum Beispiel `LPB [15|04] Nike` – ohne Dienstnummer `LPB [15] Nike`.
 Ändert jemand seinen Namen auf dem Server, passt der Bot den Titel beim nächsten Eintrag automatisch an.
 Bei Warn, Bann usw. wählst du den Beamten ebenfalls per Dropdown aus.
 

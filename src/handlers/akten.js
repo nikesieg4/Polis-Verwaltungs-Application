@@ -94,7 +94,10 @@ async function parseAkteInput(interaction, values, currentId = null) {
   if (sameUser && sameUser.id !== currentId) {
     throw new UserError(`<@${data.discord_id}> hat bereits eine Personalakte: <#${sameUser.thread_id}>`);
   }
-  const sameDn = await db.findAkteByDienstnummer(interaction.guildId, data.abteilung, data.dienstnummer);
+  data.dienstnummer = data.dienstnummer || null;
+  const sameDn = data.dienstnummer
+    ? await db.findAkteByDienstnummer(interaction.guildId, data.abteilung, data.dienstnummer)
+    : null;
   if (sameDn && sameDn.id !== currentId) {
     throw new UserError(
       `Die Dienstnummer **[${data.abteilung}|${data.dienstnummer}]** gehört bereits zur Akte von **${sameDn.name}**.`,

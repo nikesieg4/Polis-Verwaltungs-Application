@@ -162,10 +162,11 @@ const BEAMTER_FIELD = {
 /* Personalakte (Übersicht = erste Nachricht im Forum-Post)            */
 /* ------------------------------------------------------------------ */
 
-/** Name des Forum-Beitrags: LPB [Abteilung|Dienstnummer] Discord-Name */
+/** Name des Forum-Beitrags: LPB [Abteilung|Dienstnummer] Discord-Name  (ohne DN: LPB [Abteilung] Discord-Name) */
 function threadName(akte) {
   if (akte.abteilung) {
-    return cut(`LPB [${akte.abteilung}|${akte.dienstnummer || '—'}] ${akte.discord_name || akte.name}`, 100);
+    const tag = akte.dienstnummer ? `${akte.abteilung}|${akte.dienstnummer}` : akte.abteilung;
+    return cut(`LPB [${tag}] ${akte.discord_name || akte.name}`, 100);
   }
   // ältere Akten ohne Abteilung
   return cut(`${akte.dienstnummer ? `[${akte.dienstnummer}] ` : ''}${akte.name}`, 100);

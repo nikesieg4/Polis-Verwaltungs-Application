@@ -161,7 +161,7 @@ const AKTE_FIELDS = [
     required: true,
     options: ABTEILUNGEN.map((a) => ({ value: a.id, label: `${a.id} – ${a.name}` })),
   },
-  { id: 'dienstnummer', name: 'Dienstnummer', label: 'Dienstnummer', type: 'short', required: true, max: 30 },
+  { id: 'dienstnummer', name: 'Dienstnummer', label: 'Dienstnummer (optional)', type: 'short', max: 30 },
   { id: 'rang', name: 'Rang', label: 'Rang', type: 'short', required: true, max: 60 },
   { id: 'name', name: 'Ingame-Name', label: 'Ingame-Name', type: 'short', required: true, max: 80 },
 ];
