@@ -214,6 +214,7 @@ function akteMessage(akte, entries) {
     );
 
   const stats = Object.entries(TYPES)
+    .filter(([k]) => k !== 'dienst') // Dienstverhalten steht separat (nur das letzte)
     .map(([k, t]) => `${t.emoji} ${t.label}: **${count(k)}**`)
     .join('\n');
   embed.addFields({ name: '📊 Übersicht', value: stats, inline: true });
