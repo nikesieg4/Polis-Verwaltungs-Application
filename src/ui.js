@@ -29,20 +29,14 @@ class UserError extends Error {}
 
 const PANEL_OPTIONS = [
   { value: 'akte_neu', label: 'Personalakte anlegen', emoji: '👮', description: 'Neue Akte für einen Beamten erstellen' },
-  ...['warn', 'bann', 'meldung', 'positiv', 'negativ'].map((k) => ({
+  ...['warn', 'bann', 'meldung', 'positiv', 'negativ', 'merkmal', 'dienst', 'ausbildung'].map((k) => ({
     value: `eintrag:${k}`,
     label: TYPES[k].label,
     emoji: TYPES[k].emoji,
     description: TYPES[k].description,
   })),
   { value: 'bearbeiten', label: 'Eintrag bearbeiten / löschen', emoji: '📝', description: 'Vorhandenen Eintrag über seine Nummer ändern' },
-  ...['merkmal', 'dienst', 'ausbildung'].map((k) => ({
-    value: `eintrag:${k}`,
-    label: TYPES[k].label,
-    emoji: TYPES[k].emoji,
-    description: TYPES[k].description,
-  })),
-  { value: 'akte_bearbeiten', label: 'Stammdaten bearbeiten', emoji: '🗂️', description: 'Name, Dienstnummer, Rang usw. ändern' },
+  { value: 'akte_bearbeiten', label: 'Stammdaten bearbeiten', emoji: '🗂️', description: 'Abteilung, Rang, Beschreibung usw. ändern' },
   { value: 'suchen', label: 'Akte suchen', emoji: '🔎', description: 'Personalakte finden und öffnen' },
 ];
 
