@@ -48,7 +48,7 @@ https://discord.com/oauth2/authorize?client_id=1574700107566284830&scope=bot%20a
 **Abteilungen:** 15 – Polizei · 20 – Kripo · 25 – SEK.
 Der Forum-Beitrag heißt wie der **Discord-Name** des Beamten auf dem Server.
 Ändert jemand seinen Namen, passt der Bot den Titel beim nächsten Eintrag automatisch an.
-Bei Warn, Bann usw. wählst du den Beamten ebenfalls per Dropdown aus.
+Bei Warn, Bann usw. stehen im Dropdown **nur Beamte mit Personalakte** (bei mehr als 25 Akten: Mitgliedersuche, Leute ohne Akte werden abgelehnt).
 
 Jeder Beamte hat **einen** Forum-Post mit seiner **Übersicht**: Stammdaten, Zähler aller Einträge, letztes Dienstverhalten, Ausbildungen, Merkmale, Probleme und die letzten Einträge.
 Sie aktualisiert sich automatisch.

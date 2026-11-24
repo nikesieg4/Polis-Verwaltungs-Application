@@ -286,12 +286,15 @@ async function setMeta(key, value) {
 }
 
 const allAkten = () => all('SELECT * FROM akten ORDER BY id');
+const listAkten = (guildId) =>
+  all(`SELECT * FROM akten WHERE guild_id = ? ORDER BY lower(coalesce(discord_name, name))`, [guildId]);
 
 module.exports = {
   init,
   getMeta,
   setMeta,
   allAkten,
+  listAkten,
   now,
   getConfig,
   saveConfig,

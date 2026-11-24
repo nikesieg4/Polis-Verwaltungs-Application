@@ -103,10 +103,12 @@ function buildModal(customId, title, fields, values = {}) {
         .addOptions(
           f.options.map((o) => {
             const opt = typeof o === 'string' ? { value: o, label: o } : o;
-            return new StringSelectMenuOptionBuilder()
-              .setLabel(opt.label)
+            const option = new StringSelectMenuOptionBuilder()
+              .setLabel(cut(opt.label, 100))
               .setValue(opt.value)
               .setDefault(value !== undefined && value !== null && String(value) === opt.value);
+            if (opt.description) option.setDescription(cut(opt.description, 100));
+            return option;
           }),
         );
       label.setStringSelectMenuComponent(select);

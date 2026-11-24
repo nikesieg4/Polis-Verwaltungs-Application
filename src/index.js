@@ -41,10 +41,10 @@ async function route(interaction) {
     if (interaction.customId === 'panel:modal') return setup.panelModalSubmit(interaction);
     if (scope === 'akte' && action === 'new') return akten.akteNew(interaction);
     if (scope === 'akte' && action === 'save') return akten.akteSave(interaction, arg);
-    if (scope === 'entry' && action === 'new') return akten.entryNew(interaction, arg);
+    if (scope === 'entry' && action === 'new') return akten.entryNew(interaction, arg, flag);
     if (scope === 'entry' && action === 'save') return akten.entrySave(interaction, arg, flag);
     if (scope === 'find' && action === 'entry') return akten.findEntry(interaction);
-    if (scope === 'find' && action === 'akte') return akten.findAkte(interaction);
+    if (scope === 'find' && action === 'akte') return akten.findAkte(interaction, arg);
     if (scope === 'find' && action === 'search') return akten.search(interaction);
   }
 

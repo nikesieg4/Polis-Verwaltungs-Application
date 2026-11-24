@@ -1,7 +1,7 @@
 'use strict';
 const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ChannelType } = require('discord.js');
 const db = require('../db');
-const { TYPES, AKTE_FIELDS, summary } = require('../categories');
+const { TYPES, AKTE_FIELDS, summary, abteilungName } = require('../categories');
 const { requireAccess } = require('../access');
 const {
   UserError,
@@ -22,6 +22,47 @@ const EPH = { flags: MessageFlags.Ephemeral };
 /* ------------------------------------------------------------------ */
 /* Hilfsfunktionen                                                     */
 /* ------------------------------------------------------------------ */
+
+const MAX_SELECT_OPTIONS = 25; // Discord-Limit für Auswahlmenüs
+
+/**
+ * Feld „Beamter“ für Formulare: Auswahl nur aus Beamten MIT Personalakte.
+ * Bis 25 Akten als Liste (mode 'a'), darüber Mitgliedersuche + Prüfung beim Absenden (mode 'u').
+ */
+async function beamterField(guildId) {
+  const list = await db.listAkten(guildId);
+  if (!list.length) {
+    throw new UserError('Es gibt noch keine Personalakten. Lege zuerst eine über **👮 Personalakte anlegen** an.');
+  }
+  if (list.length > MAX_SELECT_OPTIONS) return { mode: 'u', field: BEAMTER_FIELD };
+  return {
+    mode: 'a',
+    field: {
+      id: 'akte',
+      label: 'Beamter',
+      description: 'Nur Beamte mit Personalakte',
+      type: 'select',
+      required: true,
+      options: list.map((a) => ({
+        value: String(a.id),
+        label: a.discord_name || a.name,
+        description: [a.abteilung ? `${a.abteilung} ${abteilungName(a.abteilung)}` : '', a.rang, a.name]
+          .filter(Boolean)
+          .join(' · '),
+      })),
+    },
+  };
+}
+
+/** Liest die ausgewählte Akte aus einem Formular mit beamterField() */
+async function akteFromModal(interaction, mode) {
+  if (mode === 'a') {
+    const id = interaction.fields.getStringSelectValues('akte')?.[0];
+    if (!id) throw new UserError('Bitte einen Beamten auswählen.');
+    return loadAkte(interaction.guildId, id);
+  }
+  return akteForMember(interaction.guildId, readModal(interaction, [BEAMTER_FIELD]).beamter);
+}
 
 /** Akte des im Dropdown gewählten Discord-Mitglieds */
 async function akteForMember(guildId, userId) {
@@ -143,7 +184,8 @@ async function panelSelect(interaction) {
       break;
     case 'eintrag': {
       const t = TYPES[typ];
-      await interaction.showModal(buildModal(`entry:new:${typ}`, `${t.emoji} ${t.label}`, [BEAMTER_FIELD, ...t.fields]));
+      const { mode, field } = await beamterField(interaction.guildId);
+      await interaction.showModal(buildModal(`entry:new:${typ}:${mode}`, `${t.emoji} ${t.label}`, [field, ...t.fields]));
       break;
     }
     case 'bearbeiten':
@@ -161,9 +203,11 @@ async function panelSelect(interaction) {
         ]),
       );
       break;
-    case 'akte_bearbeiten':
-      await interaction.showModal(buildModal('find:akte', '🗂️ Stammdaten bearbeiten', [BEAMTER_FIELD]));
+    case 'akte_bearbeiten': {
+      const { mode, field } = await beamterField(interaction.guildId);
+      await interaction.showModal(buildModal(`find:akte:${mode}`, '🗂️ Stammdaten bearbeiten', [field]));
       break;
+    }
     case 'suchen':
       await interaction.showModal(
         buildModal('find:search', '🔎 Akte suchen', [
@@ -219,15 +263,14 @@ async function akteNew(interaction) {
   }
 }
 
-async function entryNew(interaction, typ) {
+async function entryNew(interaction, typ, mode = 'u') {
   if (!TYPES[typ]) throw new UserError('Unbekannte Eintragsart.');
   await requireAccess(interaction);
   await interaction.deferReply(EPH);
 
-  const values = readModal(interaction, [BEAMTER_FIELD, ...TYPES[typ].fields]);
-  const akte = await akteForMember(interaction.guildId, values.beamter);
-  delete values.beamter;
-  validateEntry(typ, values);
+  // Nur Beamte mit Personalakte – sonst Fehlermeldung
+  const akte = await akteFromModal(interaction, mode);
+  const values = validateEntry(typ, readModal(interaction, TYPES[typ].fields));
 
   const thread = await getThread(interaction.client, akte);
   const entryId = await db.createEntry(akte, typ, values, interaction.user.id);
@@ -296,9 +339,9 @@ async function findEntry(interaction) {
   await interaction.reply({ ...EPH, ...entryDetailView(entry, akte, { akteId: akte.id, typ: 'alle', page: 0 }) });
 }
 
-async function findAkte(interaction) {
+async function findAkte(interaction, mode = 'u') {
   await requireAccess(interaction);
-  const akte = await akteForMember(interaction.guildId, readModal(interaction, [BEAMTER_FIELD]).beamter);
+  const akte = await akteFromModal(interaction, mode);
   await interaction.reply({
     ...EPH,
     content: `🗂️ Personalakte von **${akte.name}** – ${akte.thread_id ? `<#${akte.thread_id}>` : ''}`,
