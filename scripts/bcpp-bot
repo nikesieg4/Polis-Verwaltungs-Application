@@ -10,6 +10,18 @@ case "${1:-help}" in
   start)   systemctl start bcpp-bot && echo "▶ gestartet" ;;
   update)  bash "$DIR/scripts/update.sh" --force ;;
   config)  ${EDITOR:-nano} "$DIR/.env" && systemctl restart bcpp-bot && echo "✅ gespeichert und neu gestartet" ;;
+  set)
+    # bcpp-bot set SCHLUESSEL WERT  – einzelnen .env-Wert setzen (handyfreundlich, ohne Editor)
+    key="${2:-}"; val="${3-}"
+    [[ $key =~ ^[A-Z_][A-Z0-9_]*$ ]] || { echo "Benutzung: bcpp-bot set SCHLUESSEL WERT"; exit 1; }
+    tmp="$(mktemp)"
+    grep -v "^${key}=" "$DIR/.env" >"$tmp" || true
+    printf '%s=%s\n' "$key" "$val" >>"$tmp"
+    cat "$tmp" >"$DIR/.env"; rm -f "$tmp"
+    systemctl restart bcpp-bot && echo "✅ ${key} gesetzt, Bot neu gestartet" ;;
+  show)
+    # .env anzeigen, geheime Werte gekürzt
+    sed -E 's/^((DISCORD_TOKEN|CF_API_TOKEN)=.{4}).*/\1…(versteckt)/' "$DIR/.env" ;;
   reconfigure) bash "$DIR/scripts/setup.sh" --reconfigure ;;
   backup)
     f="/root/bcpp-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
@@ -29,6 +41,8 @@ bcpp-bot – BCPP Aktenverwaltung
   start|stop   Bot starten / stoppen
   update       Sofort aus GitHub aktualisieren
   config       .env bearbeiten (danach automatischer Neustart)
+  set K W      einzelnen Wert setzen, z. B.: bcpp-bot set CF_D1_DATABASE_ID 1234-…
+  show         .env anzeigen (Tokens versteckt)
   reconfigure  Token / Datenbank neu abfragen
   backup       .env + Datenbank sichern nach /root
   uninstall    Bot komplett entfernen
