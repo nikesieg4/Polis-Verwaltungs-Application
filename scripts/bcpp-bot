@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Verwaltungsbefehl für den Server:  bcpp-bot <befehl>
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+case "${1:-help}" in
+  status)  systemctl status bcpp-bot --no-pager; echo; systemctl list-timers bcpp-bot-update.timer --no-pager ;;
+  logs)    journalctl -u bcpp-bot -f -n 100 -o cat ;;
+  restart) systemctl restart bcpp-bot && echo "✅ neu gestartet" ;;
+  stop)    systemctl stop bcpp-bot && echo "⏹ gestoppt" ;;
+  start)   systemctl start bcpp-bot && echo "▶ gestartet" ;;
+  update)  bash "$DIR/scripts/update.sh" --force ;;
+  config)  ${EDITOR:-nano} "$DIR/.env" && systemctl restart bcpp-bot && echo "✅ gespeichert und neu gestartet" ;;
+  reconfigure) bash "$DIR/scripts/setup.sh" --reconfigure ;;
+  backup)
+    f="/root/bcpp-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+    tar -czf "$f" -C "$DIR" .env data && echo "✅ Backup: $f" ;;
+  uninstall)
+    read -rp "Bot wirklich komplett entfernen? Daten in $DIR/data gehen verloren! (ja/N) " a
+    [[ $a == ja ]] || exit 0
+    systemctl disable --now bcpp-bot bcpp-bot-update.timer || true
+    rm -f /etc/systemd/system/bcpp-bot*.service /etc/systemd/system/bcpp-bot-update.timer /usr/local/bin/bcpp-bot
+    systemctl daemon-reload; rm -rf "$DIR"; echo "🗑 entfernt" ;;
+  *) cat <<HELP
+bcpp-bot – BCPP Aktenverwaltung
+
+  status       Status des Bots und des Auto-Updaters
+  logs         Live-Logs anzeigen (Strg+C zum Beenden)
+  restart      Bot neu starten
+  start|stop   Bot starten / stoppen
+  update       Sofort aus GitHub aktualisieren
+  config       .env bearbeiten (danach automatischer Neustart)
+  reconfigure  Token / Datenbank neu abfragen
+  backup       .env + Datenbank sichern nach /root
+  uninstall    Bot komplett entfernen
+HELP
+  ;;
+esac

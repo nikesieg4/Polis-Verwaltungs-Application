@@ -1,0 +1,19 @@
+{
+  "name": "bcpp-aktenverwaltung",
+  "version": "1.0.0",
+  "description": "Discord-Bot für die Personalakten des Berlin City Polizeipräsidiums",
+  "main": "src/index.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "migrate": "node --disable-warning=ExperimentalWarning scripts/migrate.js",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.28.1"
+  }
+}

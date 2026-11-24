@@ -1,0 +1,33 @@
+# Verbindet die Cloudflare-D1-Datenbank mit GitHub:
+# Bei jeder Änderung am Datenbankschema (src/schema.js) werden die Tabellen in D1 angelegt/aktualisiert.
+#
+# Benötigte Secrets (Repo → Settings → Secrets and variables → Actions):
+#   CF_ACCOUNT_ID, CF_D1_DATABASE_ID, CF_API_TOKEN
+name: D1 Datenbank
+
+on:
+  push:
+    branches: [main]
+    paths: [src/schema.js, src/db.js, scripts/migrate.js]
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      DB_DRIVER: d1
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_D1_DATABASE_ID: ${{ secrets.CF_D1_DATABASE_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Schema auf D1 anwenden
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then
+            echo "Keine Cloudflare-Secrets gesetzt – übersprungen (Bot nutzt dann lokale SQLite)."
+            exit 0
+          fi
+          node scripts/migrate.js
