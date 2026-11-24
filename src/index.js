@@ -98,7 +98,10 @@ client.once(Events.ClientReady, async (c) => {
     console.error('❌ Slash-Befehle konnten nicht registriert werden:', err);
   }
 
-  akten.migrateEntriesToView(c).catch((err) => console.error('[Umstellung]', err));
+  akten
+    .migrateEntriesToView(c)
+    .then(() => akten.refreshAllOnce(c))
+    .catch((err) => console.error('[Umstellung]', err));
 
   const invite = c.generateInvite({
     scopes: [OAuth2Scopes.Bot, OAuth2Scopes.ApplicationsCommands],

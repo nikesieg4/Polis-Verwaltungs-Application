@@ -162,14 +162,9 @@ const BEAMTER_FIELD = {
 /* Personalakte (Übersicht = erste Nachricht im Forum-Post)            */
 /* ------------------------------------------------------------------ */
 
-/** Name des Forum-Beitrags: LPB [Abteilung|Dienstnummer] Discord-Name  (ohne DN: LPB [Abteilung] Discord-Name) */
+/** Name des Forum-Beitrags = Discord-Name des Beamten (ältere Akten ohne Discord: Ingame-Name) */
 function threadName(akte) {
-  if (akte.abteilung) {
-    const tag = akte.dienstnummer ? `${akte.abteilung}|${akte.dienstnummer}` : akte.abteilung;
-    return cut(`LPB [${tag}] ${akte.discord_name || akte.name}`, 100);
-  }
-  // ältere Akten ohne Abteilung
-  return cut(`${akte.dienstnummer ? `[${akte.dienstnummer}] ` : ''}${akte.name}`, 100);
+  return cut(akte.discord_name || akte.name, 100);
 }
 
 function listField(items, max = 1024) {
@@ -204,11 +199,11 @@ function akteMessage(akte, entries) {
         [
           `**Discord:** ${akte.discord_id ? `<@${akte.discord_id}>` : '—'}`,
           `**Abteilung:** ${akte.abteilung ? `${akte.abteilung} – ${abteilungName(akte.abteilung)}` : '—'}`,
-          `**Dienstnummer:** ${akte.dienstnummer || '—'}`,
+          akte.dienstnummer ? `**Dienstnummer:** ${akte.dienstnummer}` : '',
           `**Rang:** ${akte.rang || '—'}`,
           `**Ingame-Name:** ${akte.name}`,
           `**Angelegt:** ${ts(akte.created_at, 'D')}${akte.created_by ? ` von <@${akte.created_by}>` : ''}`,
-          akte.notiz ? `\n📌 **Notiz:**\n${akte.notiz}` : '',
+          akte.notiz ? `\n📝 **Beschreibung:**\n${akte.notiz}` : '',
         ]
           .filter(Boolean)
           .join('\n'),

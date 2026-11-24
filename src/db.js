@@ -175,10 +175,21 @@ async function setAkteThread(id, threadId) {
 
 async function updateAkte(id, data, userId) {
   await run(
-    `UPDATE akten SET name = ?, dienstnummer = ?, rang = ?, discord_id = ?, discord_name = ?, abteilung = ?,
+    `UPDATE akten SET name = ?, dienstnummer = ?, rang = ?, discord_id = ?, discord_name = ?, abteilung = ?, notiz = ?,
        updated_by = ?, updated_at = ?
      WHERE id = ?`,
-    [data.name, data.dienstnummer, data.rang, data.discord_id, data.discord_name, data.abteilung, userId, now(), id],
+    [
+      data.name,
+      data.dienstnummer,
+      data.rang,
+      data.discord_id,
+      data.discord_name,
+      data.abteilung,
+      data.notiz,
+      userId,
+      now(),
+      id,
+    ],
   );
 }
 

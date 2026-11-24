@@ -94,7 +94,9 @@ async function parseAkteInput(interaction, values, currentId = null) {
   if (sameUser && sameUser.id !== currentId) {
     throw new UserError(`<@${data.discord_id}> hat bereits eine Personalakte: <#${sameUser.thread_id}>`);
   }
-  data.dienstnummer = data.dienstnummer || null;
+  data.notiz = data.notiz || null;
+  // Dienstnummer ist nicht mehr im Formular – vorhandene Werte älterer Akten bleiben erhalten
+  data.dienstnummer = data.dienstnummer || (currentId ? (await db.getAkte(currentId))?.dienstnummer : null) || null;
   const sameDn = data.dienstnummer
     ? await db.findAkteByDienstnummer(interaction.guildId, data.abteilung, data.dienstnummer)
     : null;
@@ -450,6 +452,24 @@ async function migrateEntriesToView(client) {
   console.log(`✅ Umstellung: ${akten.length} Akten aktualisiert, ${removed} alte Eintrags-Nachrichten entfernt`);
 }
 
+/** Einmalig alle Akten neu aufbauen (z. B. nach Änderung des Titel-Formats). key bei jeder Änderung erhöhen. */
+async function refreshAllOnce(client, key = 'refresh_titles_v2') {
+  if (await db.getMeta(key)) return;
+  const akten = await db.allAkten();
+  let done = 0;
+  for (const akte of akten) {
+    if (!client.guilds.cache.has(akte.guild_id)) continue;
+    try {
+      await refreshAkte(client, akte.id);
+      done++;
+    } catch (err) {
+      console.error(`[Aktualisierung] Akte #${akte.id}:`, err.message);
+    }
+  }
+  await db.setMeta(key, String(db.now()));
+  console.log(`✅ ${done} Akten aktualisiert (${key})`);
+}
+
 async function akteEditButton(interaction, id) {
   await requireAccess(interaction);
   const akte = await loadAkte(interaction.guildId, id);
@@ -501,5 +521,6 @@ module.exports = {
   akteViewButton,
   viewInteraction,
   migrateEntriesToView,
+  refreshAllOnce,
   cancel,
 };
