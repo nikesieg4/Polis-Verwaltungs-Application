@@ -38,6 +38,7 @@ function d1Backend({ accountId, databaseId, apiToken }) {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ sql, params: clean(params) }),
+          signal: AbortSignal.timeout(10_000), // hängende Verbindung nicht ewig warten lassen
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.success) {
@@ -118,7 +119,7 @@ async function convertProblemsToMeldung() {
   if (await getMeta(KEY)) return;
   const rows = await all(`SELECT id, daten FROM eintraege WHERE typ = 'problem'`);
   for (const row of rows) {
-    const d = JSON.parse(row.daten || '{}');
+    const d = parseDaten(row.daten);
     const daten = {
       art: 'Meldung',
       betreff: d.problem || 'Problem',
@@ -135,10 +136,24 @@ async function convertProblemsToMeldung() {
 /* Server-Konfiguration                                                */
 /* ------------------------------------------------------------------ */
 
+// Kurzer Zwischenspeicher: Formulare müssen innerhalb von 3 Sekunden geöffnet werden,
+// jede gesparte Datenbank-Abfrage (bei D1 eine HTTP-Anfrage) hilft dabei.
+const CONFIG_TTL_MS = 60_000;
+const configCache = new Map();
+
 async function getConfig(guildId) {
+  const hit = configCache.get(guildId);
+  if (hit && hit.until > Date.now()) return hit.value;
   const row = await get('SELECT * FROM guild_config WHERE guild_id = ?', [guildId]);
-  if (!row) return null;
-  return { ...row, access_role_ids: JSON.parse(row.access_role_ids || '[]') };
+  let roles = [];
+  try {
+    roles = JSON.parse(row?.access_role_ids || '[]');
+  } catch {
+    /* beschädigter Wert → keine Rollen */
+  }
+  const value = row ? { ...row, access_role_ids: Array.isArray(roles) ? roles : [] } : null;
+  configCache.set(guildId, { value, until: Date.now() + CONFIG_TTL_MS });
+  return value;
 }
 
 async function saveConfig(guildId, { forumChannelId, accessRoleIds }) {
@@ -151,6 +166,7 @@ async function saveConfig(guildId, { forumChannelId, accessRoleIds }) {
        updated_at = excluded.updated_at`,
     [guildId, forumChannelId, JSON.stringify(accessRoleIds), now()],
   );
+  configCache.delete(guildId);
 }
 
 async function setPanel(guildId, channelId, messageId) {
@@ -160,6 +176,7 @@ async function setPanel(guildId, channelId, messageId) {
     now(),
     guildId,
   ]);
+  configCache.delete(guildId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,7 +273,14 @@ async function setDiscordName(id, name) {
 /* Einträge                                                            */
 /* ------------------------------------------------------------------ */
 
-const parseEntry = (row) => (row ? { ...row, daten: JSON.parse(row.daten || '{}') } : null);
+function parseDaten(raw) {
+  try {
+    return JSON.parse(raw || '{}') ?? {};
+  } catch {
+    return {}; // beschädigter Eintrag soll nicht die ganze Akte unbrauchbar machen
+  }
+}
+const parseEntry = (row) => (row ? { ...row, daten: parseDaten(row.daten) } : null);
 
 async function createEntry(akte, typ, daten, userId) {
   const r = await run(

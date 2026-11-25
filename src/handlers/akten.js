@@ -116,8 +116,23 @@ async function refreshAkte(client, akteId) {
   const entries = await db.listEntries(akte.id);
   const starter = await thread.fetchStarterMessage().catch(() => null);
   if (starter) await starter.edit(akteMessage(akte, entries));
+  // Nicht abwarten: Discord erlaubt nur 2 Umbenennungen pro 10 Minuten, sonst hinge die Antwort minutenlang
   const name = threadName(akte);
-  if (thread.name !== name) await thread.setName(name).catch(() => {});
+  if (thread.name !== name) thread.setName(name).catch(() => {});
+}
+
+/**
+ * Übersicht aktualisieren, nachdem die Daten schon gespeichert sind.
+ * Ein Fehler hier darf die Aktion nicht als „fehlgeschlagen“ melden (sonst wird sie doppelt ausgeführt).
+ */
+async function safeRefresh(client, akteId) {
+  try {
+    await refreshAkte(client, akteId);
+    return '';
+  } catch (err) {
+    console.error(`[Übersicht] Akte #${akteId}:`, err.message);
+    return '\n-# ⚠️ Gespeichert, aber die Übersicht im Forum-Post konnte gerade nicht aktualisiert werden. Das passiert beim nächsten Eintrag automatisch.';
+  }
 }
 
 /** Formularwerte der Stammdaten prüfen + aktuellen Discord-Namen des Beamten ermitteln */
@@ -169,14 +184,22 @@ const confirmRow = (yesId, label) =>
 async function panelSelect(interaction) {
   // Auswahl im Menü zurücksetzen, damit dieselbe Option erneut gewählt werden kann
   const reset = () => interaction.message.edit(panelMessage()).catch(() => {});
-
   try {
-    await requireAccess(interaction);
-  } catch (err) {
+    await openPanelAction(interaction);
+  } finally {
     reset();
-    throw err;
   }
+}
+
+/** Öffnet das passende Formular. Discord gibt dafür nur 3 Sekunden → Abfragen parallel. */
+async function openPanelAction(interaction) {
   const [action, typ] = interaction.values[0].split(':');
+  const needsBeamter = (action === 'eintrag' && TYPES[typ]) || action === 'akte_bearbeiten';
+  const [, beamter] = await Promise.all([
+    requireAccess(interaction),
+    needsBeamter ? beamterField(interaction.guildId).catch((err) => err) : null,
+  ]);
+  if (beamter instanceof Error) throw beamter;
 
   switch (action) {
     case 'akte_neu':
@@ -185,10 +208,10 @@ async function panelSelect(interaction) {
     case 'eintrag': {
       const t = TYPES[typ];
       if (!t) {
-        reset(); // veraltetes Panel → neue Auswahl anzeigen
+        // veraltetes Panel → wird nach dieser Auswahl neu angezeigt
         throw new UserError('Diese Option gibt es nicht mehr. Das Panel wurde aktualisiert, bitte erneut auswählen.');
       }
-      const { mode, field } = await beamterField(interaction.guildId);
+      const { mode, field } = beamter;
       await interaction.showModal(buildModal(`entry:new:${typ}:${mode}`, `${t.emoji} ${t.label}`, [field, ...t.fields]));
       break;
     }
@@ -208,7 +231,7 @@ async function panelSelect(interaction) {
       );
       break;
     case 'akte_bearbeiten': {
-      const { mode, field } = await beamterField(interaction.guildId);
+      const { mode, field } = beamter;
       await interaction.showModal(buildModal(`find:akte:${mode}`, '🗂️ Stammdaten bearbeiten', [field]));
       break;
     }
@@ -229,7 +252,6 @@ async function panelSelect(interaction) {
     default:
       throw new UserError('Unbekannte Aktion.');
   }
-  reset();
 }
 
 /* ------------------------------------------------------------------ */
@@ -278,10 +300,11 @@ async function entryNew(interaction, typ, mode = 'u') {
 
   const thread = await getThread(interaction.client, akte);
   const entryId = await db.createEntry(akte, typ, values, interaction.user.id);
-  await refreshAkte(interaction.client, akte.id);
+  const warn = await safeRefresh(interaction.client, akte.id);
   await interaction.editReply(
     `✅ ${TYPES[typ].emoji} **${TYPES[typ].label}** (Eintrag #${entryId}) zur Akte von **${akte.name}** hinzugefügt: <#${thread.id}>\n` +
-      '-# Ansehen über den Button „📋 Einträge anzeigen“ in der Akte.',
+      '-# Ansehen über den Button „📋 Einträge anzeigen“ in der Akte.' +
+      warn,
   );
 }
 
@@ -298,18 +321,18 @@ async function entrySave(interaction, id, flag) {
   await db.updateEntry(entry.id, values, interaction.user.id);
   const updated = await db.getEntry(entry.id);
   // Alte Einträge aus früheren Versionen, die noch als Nachricht existieren, mit aktualisieren
-  const thread = await getThread(interaction.client, akte);
-  if (updated.message_id) {
+  const thread = await getThread(interaction.client, akte).catch(() => null);
+  if (thread && updated.message_id) {
     const msg = await thread.messages.fetch(updated.message_id).catch(() => null);
     if (msg) await msg.edit(entryMessage(updated, akte)).catch(() => {});
   }
-  await refreshAkte(interaction.client, akte.id);
+  const warn = await safeRefresh(interaction.client, akte.id);
 
   if (inView) {
     const view = entryDetailView(updated, akte, { akteId: akte.id, typ: 'alle', page: 0 });
-    await interaction.editReply({ ...view, content: `✅ Eintrag #${entry.id} wurde aktualisiert.` });
+    await interaction.editReply({ ...view, content: `✅ Eintrag #${entry.id} wurde aktualisiert.${warn}` });
   } else {
-    await interaction.editReply(`✅ Eintrag #${entry.id} wurde aktualisiert: <#${thread.id}>`);
+    await interaction.editReply(`✅ Eintrag #${entry.id} wurde aktualisiert${thread ? `: <#${thread.id}>` : '.'}${warn}`);
   }
 }
 
@@ -322,16 +345,18 @@ async function akteSave(interaction, id) {
 
   // Kopfzeile aller Einträge enthält Name + DN → mit aktualisieren
   const updated = await db.getAkte(akte.id);
-  await refreshAkte(interaction.client, akte.id);
-  if (akte.name !== updated.name || akte.dienstnummer !== updated.dienstnummer) {
-    const thread = await getThread(interaction.client, updated);
+  const warn = await safeRefresh(interaction.client, akte.id);
+  const thread = await getThread(interaction.client, updated).catch(() => null);
+  if (thread && (akte.name !== updated.name || akte.dienstnummer !== updated.dienstnummer)) {
     for (const e of await db.listEntries(akte.id)) {
       if (!e.message_id) continue;
       const m = await thread.messages.fetch(e.message_id).catch(() => null);
       if (m) await m.edit(entryMessage(e, updated)).catch(() => {});
     }
   }
-  await interaction.editReply(`✅ Stammdaten von **${updated.name}** gespeichert: <#${updated.thread_id}>`);
+  await interaction.editReply(
+    `✅ Stammdaten von **${updated.name}** gespeichert${updated.thread_id ? `: <#${updated.thread_id}>` : '.'}${warn}`,
+  );
 }
 
 async function findEntry(interaction) {
@@ -385,8 +410,10 @@ async function search(interaction) {
 /* ------------------------------------------------------------------ */
 
 async function entryEditButton(interaction, id, flag) {
-  await requireAccess(interaction);
-  const entry = await loadEntry(interaction.guildId, id);
+  // parallel, damit das Formular innerhalb der 3-Sekunden-Frist von Discord aufgeht
+  const [, entry] = await Promise.all([requireAccess(interaction), loadEntry(interaction.guildId, id).catch((e) => e)]);
+  if (entry instanceof Error) throw entry;
+  if (!TYPES[entry.typ]) throw new UserError(`Eintrag #${entry.id} hat eine Art, die es nicht mehr gibt.`);
   const t = TYPES[entry.typ];
   await interaction.showModal(
     buildModal(`entry:save:${entry.id}${flag === 'v' ? ':v' : ''}`, `📝 ${t.label} #${entry.id} bearbeiten`, t.fields, entry.daten),
@@ -428,12 +455,12 @@ async function entryDeleteConfirm(interaction, id, flag) {
     const m = await thread.messages.fetch(entry.message_id).catch(() => null);
     await m?.delete().catch(() => {});
   }
-  if (thread) await refreshAkte(interaction.client, akte.id);
+  const warn = thread ? await safeRefresh(interaction.client, akte.id) : '';
   if (flag === 'v') {
     const view = entriesView(akte, await db.listEntries(akte.id), 'alle', 0);
-    await interaction.editReply({ ...view, content: `🗑️ Eintrag #${entry.id} wurde gelöscht.` });
+    await interaction.editReply({ ...view, content: `🗑️ Eintrag #${entry.id} wurde gelöscht.${warn}` });
   } else {
-    await interaction.editReply({ content: `🗑️ Eintrag #${entry.id} wurde gelöscht.`, embeds: [], components: [] });
+    await interaction.editReply({ content: `🗑️ Eintrag #${entry.id} wurde gelöscht.${warn}`, embeds: [], components: [] });
   }
 }
 
@@ -518,8 +545,8 @@ async function refreshAllOnce(client, key = 'refresh_overview_v3') {
 }
 
 async function akteEditButton(interaction, id) {
-  await requireAccess(interaction);
-  const akte = await loadAkte(interaction.guildId, id);
+  const [, akte] = await Promise.all([requireAccess(interaction), loadAkte(interaction.guildId, id).catch((e) => e)]);
+  if (akte instanceof Error) throw akte;
   await interaction.showModal(buildModal(`akte:save:${akte.id}`, '🗂️ Stammdaten bearbeiten', AKTE_FIELDS, akte));
 }
 
